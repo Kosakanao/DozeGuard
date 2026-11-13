@@ -1,0 +1,84 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # GitHub runners ship an Android SDK; no third-party setup action needed.
+      - name: Install SDK Platform 36 and Build-Tools 36.0.0
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "SDK_ROOT=$SDK_ROOT"
+          SDKMANAGER=""
+          for c in "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+                   "$SDK_ROOT/cmdline-tools/bin/sdkmanager" \
+                   "$(command -v sdkmanager 2>/dev/null || true)"; do
+            if [ -x "$c" ]; then SDKMANAGER="$c"; break; fi
+          done
+          if [ -z "$SDKMANAGER" ]; then
+            find "$SDK_ROOT" -maxdepth 5 -name sdkmanager -print 2>/dev/null || true
+            echo "::error::sdkmanager not found under $SDK_ROOT"
+            exit 1
+          fi
+          echo "sdkmanager=$SDKMANAGER"
+          export PATH="$(dirname "$SDKMANAGER"):$PATH"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools" > /dev/null
+          sdkmanager --list_installed || true
+
+      # Repository intentionally has no Gradle Wrapper; CI pins Gradle directly.
+      - name: Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --no-daemon --console=plain
+
+      - name: Verify APK contents
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          unzip -l "$APK" | grep -q 'classes.dex'
+          for f in module.prop java_init.list scope.list; do
+            unzip -l "$APK" | grep -q "META-INF/xposed/$f"
+          done
+          echo "APK OK: $(stat -c%s "$APK") bytes"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DozeGuard-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      # No signing.properties in CI -> AGP's ephemeral debug keystore is used.
+      - name: Attach APK to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/debug/app-debug.apk
+          generate_release_notes: true

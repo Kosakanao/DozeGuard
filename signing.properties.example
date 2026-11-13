@@ -1,0 +1,13 @@
+# Copy to signing.properties (gitignored) to use a fixed debug keystore.
+# Paths are relative to the repository root.
+# These are Android's public default debug values - use your own for anything real.
+
+storeFile=key/debug.keystore
+storePassword=android
+keyAlias=dozeguard
+keyPassword=android
+
+# Create a matching keystore:
+# keytool -genkeypair -v -keystore key/debug.keystore -alias dozeguard \
+#   -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android \
+#   -dname "CN=DozeGuard Debug,O=DozeGuard,C=CN"

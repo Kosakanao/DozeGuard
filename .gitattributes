@@ -1,0 +1,7 @@
+# Keep all text files on LF in the repository (Windows checkout is fine).
+* text=auto eol=lf
+
+*.jar binary
+*.keystore binary
+*.png binary
+*.jpg binary

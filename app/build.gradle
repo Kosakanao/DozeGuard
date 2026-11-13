@@ -1,0 +1,68 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Signing is optional. Copy signing.properties.example -> signing.properties
+// (gitignored) to reuse a fixed debug keystore for overwrite-installs.
+// Without it the build falls back to AGP's default debug keystore, which is
+// what CI uses. No private key is ever stored in this repository.
+def signingProps = new Properties()
+def signingPropsFile = rootProject.file('signing.properties')
+if (signingPropsFile.exists()) {
+    signingPropsFile.withInputStream { signingProps.load(it) }
+}
+def hasCustomSigning = signingProps.containsKey('storeFile')
+def customKeystore = hasCustomSigning
+        ? rootProject.file(signingProps.getProperty('storeFile'))
+        : null
+
+android {
+    namespace 'com.dozeguard'
+    compileSdk 36
+    // AGP defaults to 35.0.0 here, which triggers an SDK license prompt.
+    buildToolsVersion '36.0.0'
+
+    defaultConfig {
+        applicationId 'com.dozeguard'
+        minSdk 26
+        targetSdk 36
+        versionCode 6
+        versionName '0.10'
+    }
+
+    signingConfigs {
+        debug {
+            if (hasCustomSigning) {
+                storeFile customKeystore
+                storePassword signingProps.getProperty('storePassword')
+                keyAlias signingProps.getProperty('keyAlias')
+                keyPassword signingProps.getProperty('keyPassword')
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    // Provided by the Xposed framework at runtime (libxposed API 102).
+    compileOnly files('libs/libxposed-api-102.jar')
+}
