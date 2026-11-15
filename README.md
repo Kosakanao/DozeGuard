@@ -37,22 +37,26 @@
 
 ### 安装
 
-1. 取 APK：[Actions](https://github.com/Kosakanao/DozeGuard/actions) 最新一次成功运行的 Artifacts → `DozeGuard-debug-apk`；或到 [Releases](https://github.com/Kosakanao/DozeGuard/releases) 下载 tag 对应的包。
-2. 安装，参数不能省：
-
-   ```bash
-   adb install -r --no-incremental app-debug.apk
-   ```
-
-   `--no-incremental` 让 APK 落成真实文件。否则 `adb` 可能走 incfs 增量安装，框架守护进程按普通路径读不到 APK，模块会被静默跳过。
+1. 取 APK：到 [Releases](https://github.com/Kosakanao/DozeGuard/releases) 下载 tag 对应的包（推荐），或 [Actions](https://github.com/Kosakanao/DozeGuard/actions) 最新一次成功运行的 Artifacts → `DozeGuard-debug-apk`。
+2. **在手机上直接点 APK 安装**：下载完用文件管理器点开，走系统安装器，按提示允许「安装未知来源应用」。这是推荐路径，不需要电脑、不需要 ADB。系统安装器会把完整 APK 写入后再落盘，框架能正常读到模块。
 3. 在框架管理器里启用模块，作用域选 `system`，重启手机。
-4. 确认钩子挂上了：
+4. 确认钩子挂上了。有 ADB 时最直观：
 
    ```bash
    adb shell su -c 'cat /data/system/dozeguard.log'
    ```
 
-   看到 `### installed on 2 method(s)` 即可。
+   看到 `### installed on 2 method(s)` 即可。没有 ADB 时：看框架管理器里模块已启用且作用域包含 `system`，再看 App 底部状态栏的 `root ✓`；能正常勾选保存并看到白名单变化，钩子就是在工作。
+
+**用 ADB 安装（可选）**
+
+```bash
+adb install -r --no-incremental app-debug.apk
+```
+
+`--no-incremental` 只用于排除 ADB 的 incfs 流式安装：这条路径是 ADB 特有的，且只有 APK 旁边存在 `.apk.idsig`（v4 签名）或显式指定 `--incremental` 时才会启用；本仓库产物不带 idsig，普通 `adb install -r` 会回退到完整安装。加这个参数只是把变量彻底排除。**手机上点安装不涉及 incfs，不需要这个参数。**
+
+注意签名：CI 产物用临时 debug 签名、每次都不同，只能全新安装。若手机上装过别的签名的版本，先长按图标卸载旧包（或 `adb uninstall com.dozeguard`）再装。
 
 ### 使用与撤回
 
@@ -149,7 +153,7 @@ Linux / macOS 写 `sdk.dir=/home/you/Android/Sdk`。这个文件只属于你的�
 
 **签名（可选）** — 仓库不含私钥：`key/`、`signing.properties`、`*.keystore` 全部被忽略。`app/build.gradle` 只在 `signing.properties` 存在时读取它，否则回落到 AGP 默认 debug 签名。要固定签名就执行 `cp signing.properties.example signing.properties`，按文件内注释填四项，并用里面附的 `keytool` 命令生成 keystore。
 
-注意：CI 产物用临时 debug 签名、每次都不同，只能全新安装。若手机上装过固定签名的版本，先 `adb uninstall com.dozeguard`；需要可覆盖安装的包，用固定签名在本地构建。
+注意：CI 产物用临时 debug 签名、每次都不同，只能全新安装。若手机上装过固定签名的版本，先在手机上卸载旧包（或 `adb uninstall com.dozeguard`）；需要可覆盖安装的包，用固定签名在本地构建。
 
 ## 4. 编译方法
 
@@ -211,7 +215,7 @@ APK 根目录 `META-INF/xposed/` 下必须有 `module.prop`（`minApiVersion=101
 | `gradle: command not found` | 没装 Gradle 或没加 `PATH` | 见 3 节；CI 里检查 `setup-gradle` 的 `gradle-version` |
 | `SDK location not found` | 找不到 SDK | 设 `ANDROID_HOME`，或写 `local.properties` |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | 签名与已装版本不一致 | `adb uninstall com.dozeguard` 后重装 |
-| 装了但框架不加载模块 | `adb` 走了 incfs 增量安装 | 加 `--no-incremental` |
+| 装了但框架不加载模块 | 多数是：模块未在框架里启用 / 作用域没选 `system` / 装完没重启 / 签名冲突留下旧包；少数是 ADB 走了 incfs 增量安装 | 按顺序排查前四项；ADB 安装时加 `--no-incremental`。手机上点 APK 安装不走 incfs，可排除这一项 |
 | AGP / Maven 依赖下载失败 | JVM 的网络/TLS 被本地环境拦截 | 换网络或配代理；CI 走 GitHub runner 网络不受影响 |
 
 ## 贡献与许可
